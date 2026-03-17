@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: 'Courier New', monospace;
+            color: #fff;
+        }
+        #score {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #ff0;
+        }
+        canvas {
+            border: 2px solid #333;
+        }
+        #message {
+            font-size: 28px;
+            margin-top: 10px;
+            height: 35px;
+        }
+        #instructions {
+            margin-top: 15px;
+            color: #888;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="score">Score: 0 | Lives: 3</div>
+    <canvas id="game" width="560" height="620"></canvas>
+    <div id="message"></div>
+    <div id="instructions">Arrow Keys or WASD to move | Press SPACE to start/restart</div>
+    <script src="pacman.js"></script>
+</body>
+</html>
