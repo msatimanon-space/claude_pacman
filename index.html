@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pac-Man</title>
+    <title>Pac-Man - 2 Player</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -17,7 +17,7 @@
             color: #fff;
         }
         #score {
-            font-size: 24px;
+            font-size: 20px;
             margin-bottom: 10px;
             color: #ff0;
         }
@@ -29,20 +29,67 @@
             margin-top: 10px;
             height: 35px;
         }
-        #instructions {
-            margin-top: 15px;
-            color: #888;
-            font-size: 14px;
+        #controls {
+            margin-top: 12px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
         }
+        #instructions {
+            color: #888;
+            font-size: 13px;
+            text-align: center;
+        }
+        #speed-panel {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #speed-panel label {
+            color: #0f0;
+            font-size: 13px;
+        }
+        .speed-btn {
+            background: #333;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .speed-btn:hover { background: #0f0; color: #000; }
+        .speed-btn.active { background: #0f0; color: #000; }
+        #auto-toggle {
+            background: #333;
+            color: #f80;
+            border: 1px solid #f80;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        #auto-toggle:hover, #auto-toggle.active { background: #f80; color: #000; }
     </style>
 </head>
 <body>
-    <div id="score">Score: 0 | Lives: 3</div>
+    <div id="score">P1 Score: 0 | P2 Score: 0 | Lives: 3</div>
     <canvas id="game" width="560" height="620"></canvas>
     <div id="message"></div>
-    <div id="instructions">Arrow Keys or WASD to move | Press SPACE to start/restart</div>
+    <div id="controls">
+        <div id="instructions">
+            P1 (Yellow): Arrow Keys &nbsp;|&nbsp; P2 (Green): WASD<br>
+            Press SPACE to start/restart
+        </div>
+        <div id="speed-panel">
+            <label>P2 Speed:</label>
+            <button class="speed-btn" data-speed="3">Fast</button>
+            <button class="speed-btn active" data-speed="6">Slow</button>
+            <button class="speed-btn" data-speed="9">Slower</button>
+            <button id="auto-toggle">Auto: OFF</button>
+        </div>
+    </div>
     <script>
-// Pac-Man Game - Self-contained
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
@@ -86,13 +133,54 @@ const MAP = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ];
 
-let map, score, lives, gameState, pacman, ghosts, frightTimer, dotCount;
+let map, score1, score2, lives, gameState, pacman, pacman2, ghosts, frightTimer, dotCount;
 const GHOST_COLORS = ['#ff0000', '#ffb8ff', '#00ffff', '#ffb852'];
 const GHOST_NAMES = ['blinky', 'pinky', 'inky', 'clyde'];
 
+// P2 speed control
+let p2MoveInterval = 6; // slower than P1's 3
+const SPEED_OPTIONS = [3, 6, 9];
+const SPEED_LABELS = ['Fast', 'Slow', 'Slower'];
+let autoSpeedOn = false;
+let autoSpeedTimer = null;
+let autoSpeedIndex = 1; // start at 'Slow'
+
+function setP2Speed(interval) {
+    p2MoveInterval = interval;
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.speed) === interval);
+    });
+}
+
+function toggleAutoSpeed() {
+    autoSpeedOn = !autoSpeedOn;
+    const btn = document.getElementById('auto-toggle');
+    btn.textContent = autoSpeedOn ? 'Auto: ON' : 'Auto: OFF';
+    btn.classList.toggle('active', autoSpeedOn);
+    if (autoSpeedOn) {
+        autoSpeedTimer = setInterval(() => {
+            autoSpeedIndex = (autoSpeedIndex + 1) % SPEED_OPTIONS.length;
+            setP2Speed(SPEED_OPTIONS[autoSpeedIndex]);
+        }, 3000); // cycle every 3 seconds
+    } else {
+        clearInterval(autoSpeedTimer);
+        autoSpeedTimer = null;
+    }
+}
+
+document.querySelectorAll('.speed-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (autoSpeedOn) toggleAutoSpeed(); // turn off auto if manually selecting
+        const spd = parseInt(btn.dataset.speed);
+        autoSpeedIndex = SPEED_OPTIONS.indexOf(spd);
+        setP2Speed(spd);
+    });
+});
+document.getElementById('auto-toggle').addEventListener('click', toggleAutoSpeed);
+
 function initGame() {
     map = MAP.map(row => [...row]);
-    score = 0; lives = 3; dotCount = 0;
+    score1 = 0; score2 = 0; lives = 3; dotCount = 0;
     map.forEach(row => row.forEach(cell => { if (cell === 2 || cell === 3) dotCount++; }));
     gameState = 'waiting';
     initPositions();
@@ -101,6 +189,7 @@ function initGame() {
 
 function initPositions() {
     pacman = { x: 14, y: 23, dir: 'left', nextDir: 'left', mouthAngle: 0.2, mouthDir: 1, animSpeed: 0.05 };
+    pacman2 = { x: 13, y: 23, dir: 'right', nextDir: 'right', mouthAngle: 0.2, mouthDir: 1, animSpeed: 0.05 };
     frightTimer = 0;
     ghosts = GHOST_COLORS.map((color, i) => ({
         x: 12 + i * 2, y: 14, color, name: GHOST_NAMES[i],
@@ -136,24 +225,28 @@ function getGhostTarget(ghost) {
     if (ghost.eaten) return { x: 14, y: 14 };
     if (ghost.frightened) return { x: Math.floor(Math.random()*COLS), y: Math.floor(Math.random()*ROWS) };
     if (ghost.mode === 'scatter') return ghost.scatterTarget;
+    // Ghosts target the closest pacman
+    const d1 = dist(ghost.x, ghost.y, pacman.x, pacman.y);
+    const d2 = dist(ghost.x, ghost.y, pacman2.x, pacman2.y);
+    const target_pac = d1 <= d2 ? pacman : pacman2;
     switch (ghost.name) {
-        case 'blinky': return { x: pacman.x, y: pacman.y };
+        case 'blinky': return { x: target_pac.x, y: target_pac.y };
         case 'pinky': {
-            let tx = pacman.x, ty = pacman.y;
-            if (pacman.dir === 'left') tx -= 4; if (pacman.dir === 'right') tx += 4;
-            if (pacman.dir === 'up') { ty -= 4; tx -= 4; } if (pacman.dir === 'down') ty += 4;
+            let tx = target_pac.x, ty = target_pac.y;
+            if (target_pac.dir === 'left') tx -= 4; if (target_pac.dir === 'right') tx += 4;
+            if (target_pac.dir === 'up') { ty -= 4; tx -= 4; } if (target_pac.dir === 'down') ty += 4;
             return { x: tx, y: ty };
         }
         case 'inky': {
-            let ax = pacman.x, ay = pacman.y;
-            if (pacman.dir === 'left') ax -= 2; if (pacman.dir === 'right') ax += 2;
-            if (pacman.dir === 'up') ay -= 2; if (pacman.dir === 'down') ay += 2;
+            let ax = target_pac.x, ay = target_pac.y;
+            if (target_pac.dir === 'left') ax -= 2; if (target_pac.dir === 'right') ax += 2;
+            if (target_pac.dir === 'up') ay -= 2; if (target_pac.dir === 'down') ay += 2;
             const blinky = ghosts[0];
             return { x: 2*ax - blinky.x, y: 2*ay - blinky.y };
         }
         case 'clyde': {
-            const d = dist(ghost.x, ghost.y, pacman.x, pacman.y);
-            if (d > 8) return { x: pacman.x, y: pacman.y };
+            const d = dist(ghost.x, ghost.y, target_pac.x, target_pac.y);
+            if (d > 8) return { x: target_pac.x, y: target_pac.y };
             return ghost.scatterTarget;
         }
     }
@@ -183,6 +276,16 @@ function moveGhost(ghost) {
 
 let frameCount = 0, modeTimer = 0;
 
+function handlePacEat(pac, scoreKey) {
+    const cell = map[pac.y]?.[pac.x];
+    if (cell === 2) { map[pac.y][pac.x] = 0; if (scoreKey === 1) score1 += 10; else score2 += 10; dotCount--; }
+    else if (cell === 3) {
+        map[pac.y][pac.x] = 0; if (scoreKey === 1) score1 += 50; else score2 += 50; dotCount--;
+        frightTimer = 360;
+        ghosts.forEach(g => { if (!g.eaten) { g.frightened = true; g.dir = oppositeDir(g.dir); } });
+    }
+}
+
 function update() {
     if (gameState !== 'playing') return;
     frameCount++;
@@ -190,33 +293,51 @@ function update() {
     const inScatter = modeTimer < 420 || (modeTimer >= 1200 && modeTimer < 1620) || (modeTimer >= 2400 && modeTimer < 2520);
     ghosts.forEach(g => { if (!g.frightened && !g.eaten) g.mode = inScatter ? 'scatter' : 'chase'; });
 
+    // P1 movement (every 3 frames)
     if (frameCount % 3 === 0) {
         if (canMove(pacman.x, pacman.y, pacman.nextDir)) pacman.dir = pacman.nextDir;
         if (canMove(pacman.x, pacman.y, pacman.dir)) move(pacman, pacman.dir);
-        const cell = map[pacman.y]?.[pacman.x];
-        if (cell === 2) { map[pacman.y][pacman.x] = 0; score += 10; dotCount--; }
-        else if (cell === 3) {
-            map[pacman.y][pacman.x] = 0; score += 50; dotCount--;
-            frightTimer = 360;
-            ghosts.forEach(g => { if (!g.eaten) { g.frightened = true; g.dir = oppositeDir(g.dir); } });
-        }
-        if (dotCount <= 0) { gameState = 'won'; messageEl.textContent = 'YOU WIN! Press SPACE to restart'; return; }
+        handlePacEat(pacman, 1);
     }
+
+    // P2 movement (every p2MoveInterval frames - slower)
+    if (frameCount % p2MoveInterval === 0) {
+        if (canMove(pacman2.x, pacman2.y, pacman2.nextDir)) pacman2.dir = pacman2.nextDir;
+        if (canMove(pacman2.x, pacman2.y, pacman2.dir)) move(pacman2, pacman2.dir);
+        handlePacEat(pacman2, 2);
+    }
+
+    if (dotCount <= 0) { gameState = 'won'; messageEl.textContent = 'YOU WIN! Press SPACE to restart'; return; }
 
     if (frameCount % 4 === 0) ghosts.forEach(g => moveGhost(g));
     if (frightTimer > 0) { frightTimer--; if (frightTimer === 0) ghosts.forEach(g => { g.frightened = false; }); }
 
-    ghosts.forEach(g => {
-        if (g.x === pacman.x && g.y === pacman.y) {
-            if (g.frightened && !g.eaten) { g.eaten = true; score += 200; }
-            else if (!g.eaten) { lives--; if (lives <= 0) { gameState = 'gameover'; messageEl.textContent = 'GAME OVER! Press SPACE to restart'; } else initPositions(); }
-        }
+    // Collision for both pacmans
+    [pacman, pacman2].forEach((pac, pi) => {
+        ghosts.forEach(g => {
+            if (g.x === pac.x && g.y === pac.y) {
+                if (g.frightened && !g.eaten) { g.eaten = true; if (pi === 0) score1 += 200; else score2 += 200; }
+                else if (!g.eaten) { lives--; if (lives <= 0) { gameState = 'gameover'; messageEl.textContent = 'GAME OVER! Press SPACE to restart'; } else initPositions(); }
+            }
+        });
     });
 
-    pacman.mouthAngle += pacman.animSpeed * pacman.mouthDir;
-    if (pacman.mouthAngle >= 0.3) pacman.mouthDir = -1;
-    if (pacman.mouthAngle <= 0.02) pacman.mouthDir = 1;
-    scoreEl.textContent = `Score: ${score} | Lives: ${lives}`;
+    // Mouth animations
+    [pacman, pacman2].forEach(pac => {
+        pac.mouthAngle += pac.animSpeed * pac.mouthDir;
+        if (pac.mouthAngle >= 0.3) pac.mouthDir = -1;
+        if (pac.mouthAngle <= 0.02) pac.mouthDir = 1;
+    });
+
+    scoreEl.textContent = `P1: ${score1} | P2: ${score2} | Lives: ${lives}`;
+}
+
+function drawPacman(pac, color) {
+    const px = pac.x*TILE+TILE/2, py = pac.y*TILE+TILE/2;
+    const angle = {right:0,down:Math.PI/2,left:Math.PI,up:-Math.PI/2}[pac.dir];
+    ctx.fillStyle = color; ctx.beginPath();
+    ctx.arc(px, py, TILE/2-1, angle+pac.mouthAngle*Math.PI, angle-pac.mouthAngle*Math.PI+2*Math.PI);
+    ctx.lineTo(px, py); ctx.fill();
 }
 
 function draw() {
@@ -230,11 +351,9 @@ function draw() {
             else if (cell === 3) { ctx.fillStyle = '#ffb8ae'; ctx.beginPath(); ctx.arc(px+TILE/2, py+TILE/2, 6, 0, Math.PI*2); ctx.fill(); }
         }
     }
-    const px = pacman.x*TILE+TILE/2, py = pacman.y*TILE+TILE/2;
-    const angle = {right:0,down:Math.PI/2,left:Math.PI,up:-Math.PI/2}[pacman.dir];
-    ctx.fillStyle = '#ffff00'; ctx.beginPath();
-    ctx.arc(px, py, TILE/2-1, angle+pacman.mouthAngle*Math.PI, angle-pacman.mouthAngle*Math.PI+2*Math.PI);
-    ctx.lineTo(px, py); ctx.fill();
+
+    drawPacman(pacman, '#ffff00');  // P1 yellow
+    drawPacman(pacman2, '#00ff00'); // P2 green
 
     ghosts.forEach(g => {
         const gx = g.x*TILE, gy = g.y*TILE;
@@ -249,6 +368,11 @@ function draw() {
         if (!g.frightened) drawGhostEyes(gx, gy, g.dir);
         else { ctx.fillStyle='#fff'; ctx.fillRect(gx+5,gy+8,3,3); ctx.fillRect(gx+12,gy+8,3,3); }
     });
+
+    // Draw P2 speed indicator
+    ctx.fillStyle = '#0f0';
+    ctx.font = '11px Courier New';
+    ctx.fillText(`P2 Speed: ${SPEED_LABELS[SPEED_OPTIONS.indexOf(p2MoveInterval)]}${autoSpeedOn ? ' [AUTO]' : ''}`, 8, canvas.height - 6);
 }
 
 function drawGhostEyes(gx, gy, dir) {
@@ -262,8 +386,14 @@ function drawGhostEyes(gx, gy, dir) {
 function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
 
 document.addEventListener('keydown', e => {
-    const keyMap = { ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',a:'left',d:'right',w:'up',s:'down',A:'left',D:'right',W:'up',S:'down' };
-    if (keyMap[e.key]) { e.preventDefault(); pacman.nextDir = keyMap[e.key]; }
+    // P1: Arrow keys
+    const p1Map = { ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down' };
+    // P2: WASD
+    const p2Map = { a:'left',d:'right',w:'up',s:'down',A:'left',D:'right',W:'up',S:'down' };
+
+    if (p1Map[e.key]) { e.preventDefault(); pacman.nextDir = p1Map[e.key]; }
+    if (p2Map[e.key]) { e.preventDefault(); pacman2.nextDir = p2Map[e.key]; }
+
     if (e.key === ' ') {
         e.preventDefault();
         if (gameState==='waiting'||gameState==='gameover'||gameState==='won') {
